@@ -1,0 +1,13 @@
+{
+    "name": "wheels-websockets",
+    "version": "0.1.0",
+    "author": "Wheels Core Team",
+    "description": "Opt-in realtime WebSocket transport for Wheels channels. Native on RustCFML today; Lucee emulation planned; graceful SSE fallback everywhere else.",
+    "wheelsVersion": ">=4.0",
+    "provides": {
+        "mixins": "global",
+        "services": [],
+        "middleware": []
+    },
+    "dependencies": {}
+}
