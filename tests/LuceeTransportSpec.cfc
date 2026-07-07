@@ -100,6 +100,87 @@ component extends="wheels.WheelsTest" {
 				expect($wsTransport().wireChannel()).toBe("/wheels");
 			});
 		});
+
+		describe("lucee listener template contract", () => {
+
+			beforeEach(() => {
+				$wsClearRegistry();
+			});
+
+			afterEach(() => {
+				$wsClearRegistry();
+				StructDelete(url, "channels");
+			});
+
+			it("onOpen registers the connection under every requested channel and returns a welcome frame", () => {
+				url.channels = "orders, chat";
+				var listener = $wsListener();
+				var wsClient = $wsFakeClient();
+
+				var welcome = listener.onOpen(wsClient);
+
+				var parsed = DeserializeJSON(welcome);
+				expect(parsed.t).toBe("welcome");
+				expect(Len(parsed.d.connId)).toBeGT(0);
+				expect(StructKeyExists(server["wheels-websockets"].registry, "orders")).toBeTrue();
+				expect(StructKeyExists(server["wheels-websockets"].registry, "chat")).toBeTrue();
+				expect(StructKeyExists(server["wheels-websockets"].registry["orders"], parsed.d.connId)).toBeTrue();
+				expect(StructKeyExists(server["wheels-websockets"].registry["chat"], parsed.d.connId)).toBeTrue();
+			});
+
+			it("a registered connection receives transport broadcasts end to end", () => {
+				url.channels = "orders";
+				var listener = $wsListener();
+				var wsClient = $wsFakeClient();
+				listener.onOpen(wsClient);
+
+				$wsTransport().broadcast(channel = "orders", event = "created", data = "{}", id = "9");
+
+				expect(ArrayLen(wsClient.sent())).toBe(1);
+				expect(DeserializeJSON(wsClient.sent()[1]).ev).toBe("created");
+			});
+
+			it("onOpen with no channels param registers nothing but still welcomes", () => {
+				StructDelete(url, "channels");
+				var listener = $wsListener();
+
+				var welcome = listener.onOpen($wsFakeClient());
+
+				expect(DeserializeJSON(welcome).t).toBe("welcome");
+				var hasAny = StructKeyExists(server, "wheels-websockets")
+					&& StructCount(server["wheels-websockets"].registry) > 0;
+				expect(hasAny).toBeFalse();
+			});
+
+			it("onClose deregisters the connection from all its channels", () => {
+				url.channels = "orders,chat";
+				var listener = $wsListener();
+				var wsClient = $wsFakeClient();
+				var welcome = DeserializeJSON(listener.onOpen(wsClient));
+
+				listener.onClose(wsClient, "bye");
+
+				expect(StructKeyExists(server["wheels-websockets"].registry["orders"], welcome.d.connId)).toBeFalse();
+				expect(StructKeyExists(server["wheels-websockets"].registry["chat"], welcome.d.connId)).toBeFalse();
+			});
+
+			it("onError also deregisters", () => {
+				url.channels = "orders";
+				var listener = $wsListener();
+				var wsClient = $wsFakeClient();
+				var welcome = DeserializeJSON(listener.onOpen(wsClient));
+
+				listener.onError(wsClient, { message = "boom" });
+
+				expect(StructKeyExists(server["wheels-websockets"].registry["orders"], welcome.d.connId)).toBeFalse();
+			});
+
+			it("onMessage returns a serialized ack", () => {
+				var listener = $wsListener();
+				var ack = listener.onMessage($wsFakeClient(), "ping");
+				expect(DeserializeJSON(ack).d.received).toBeTrue();
+			});
+		});
 	}
 
 	// ------------------------------------------------------------------
@@ -117,6 +198,10 @@ component extends="wheels.WheelsTest" {
 
 	private any function $wsTransport() {
 		return CreateObject("component", $wsBase() & ".lib.LuceeExtensionTransport").init();
+	}
+
+	private any function $wsListener() {
+		return CreateObject("component", $wsBase() & ".lucee.wheels");
 	}
 
 	private any function $wsFakeClient(boolean open = true, boolean failSend = false) {
