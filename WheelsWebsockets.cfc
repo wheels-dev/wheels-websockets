@@ -56,6 +56,14 @@ component implements="wheels.ServiceProviderInterface" {
 
 		local.transport = $resolveWebsocketsTransport(local.mode);
 
+		// The Lucee backend needs the listener CFC present in the extension's
+		// directory before it can deliver anything; without it, stay on SSE.
+		if (local.transport.active() && local.transport.name() == "lucee-extension") {
+			if (!$ensureLuceeListener(arguments.app)) {
+				local.transport = CreateObject("component", variables.componentBase & ".lib.NullTransport").init();
+			}
+		}
+
 		if (local.transport.active()) {
 			// Decorate the memory channel engine. Publish() keeps its exact
 			// contract; WS delivery is additive and failure-isolated.
@@ -146,32 +154,117 @@ component implements="wheels.ServiceProviderInterface" {
 
 	/**
 	 * Pick a transport for the requested mode. "auto" feature-detects the
-	 * engine; "none" (or any unknown value) yields the inactive transport.
+	 * engine (RustCFML first, then the Lucee websocket extension); "none"
+	 * (or any unknown value) yields the inactive transport. Forced modes
+	 * ("rustcfml", "lucee") still feature-check — they never blind-activate.
 	 *
 	 * Instance-only: relies on variables.componentBase captured in init(), so
 	 * call it on the package instance (PackageLoaderObj.getPackage(...)), never
 	 * as a mixin copy.
 	 */
 	public any function $resolveWebsocketsTransport(required string mode) {
-		if (arguments.mode != "auto") {
-			return CreateObject("component", variables.componentBase & ".lib.NullTransport").init();
-		}
+		local.m = LCase(arguments.mode);
 
-		// RustCFML: the realtime BIFs are registered in the engine's function
-		// list. GetFunctionList() also exists on Lucee/Adobe, where wsPublish
-		// is absent — so this probe is safe and cheap everywhere.
-		local.isRustCfml = false;
+		local.fl = {};
 		try {
 			local.fl = GetFunctionList();
-			local.isRustCfml = StructKeyExists(local.fl, "wsPublish");
 		} catch (any e) {
-			local.isRustCfml = false;
+			// fall through to the null transport
 		}
 
-		if (local.isRustCfml) {
+		if ((local.m == "auto" || local.m == "rustcfml") && StructKeyExists(local.fl, "wsPublish")) {
 			return CreateObject("component", variables.componentBase & ".lib.RustCfmlTransport").init();
 		}
 
+		if ((local.m == "auto" || local.m == "lucee") && StructKeyExists(local.fl, "websocketInfo")) {
+			return $luceeTransportOrNull();
+		}
+
 		return CreateObject("component", variables.componentBase & ".lib.NullTransport").init();
+	}
+
+	/**
+	 * The Lucee extension is installed, but the endpoint only works when the
+	 * servlet container exposes a JSR-356 ServerContainer (Tomcat: always;
+	 * CommandBox/undertow: only with websocket support enabled). Calling
+	 * websocketInfo() both verifies that and lazily registers the endpoint.
+	 * Instance-only (see $resolveWebsocketsTransport).
+	 */
+	public any function $luceeTransportOrNull() {
+		try {
+			websocketInfo();
+		} catch (any e) {
+			WriteLog(
+				text = "[wheels-websockets] Lucee websocket extension detected but the endpoint is unavailable on this servlet container (#e.message#). Channels continue over SSE.",
+				type = "warning",
+				file = "wheels"
+			);
+			return CreateObject("component", variables.componentBase & ".lib.NullTransport").init();
+		}
+		return CreateObject("component", variables.componentBase & ".lib.LuceeExtensionTransport").init();
+	}
+
+	/**
+	 * Make sure the wheels.cfc listener exists in the extension's websockets
+	 * directory (reported by websocketInfo().mapping). Instance-only.
+	 */
+	public boolean function $ensureLuceeListener(required struct app) {
+		try {
+			local.info = websocketInfo();
+			return $installListenerFile(directory = local.info.mapping, app = arguments.app);
+		} catch (any e) {
+			WriteLog(
+				text = "[wheels-websockets] websocketInfo() failed while preparing the Lucee listener (#e.message#). Channels continue over SSE.",
+				type = "warning",
+				file = "wheels"
+			);
+			return false;
+		}
+	}
+
+	/**
+	 * File half of the auto-install, split out so it is testable without the
+	 * extension. Existing files are never touched. Instance-only.
+	 */
+	public boolean function $installListenerFile(required string directory, required struct app) {
+		try {
+			local.target = ListAppend(arguments.directory, "wheels.cfc", "/");
+			if (FileExists(local.target)) {
+				return true;
+			}
+
+			local.allowInstall = true;
+			if (StructKeyExists(arguments.app, "websocketsListenerInstall")) {
+				local.allowInstall = arguments.app.websocketsListenerInstall;
+			}
+			local.source = GetDirectoryFromPath(GetMetadata(this).path) & "lucee/wheels.cfc";
+
+			if (!local.allowInstall) {
+				WriteLog(
+					text = "[wheels-websockets] Lucee listener missing and auto-install is disabled (websocketsListenerInstall=false). Copy #local.source# to #arguments.directory# to serve /ws/wheels.",
+					type = "warning",
+					file = "wheels"
+				);
+				return false;
+			}
+
+			if (!DirectoryExists(arguments.directory)) {
+				DirectoryCreate(arguments.directory, true, true);
+			}
+			FileCopy(local.source, local.target);
+			WriteLog(
+				text = "[wheels-websockets] Installed the Lucee listener at #local.target# (serves /ws/wheels). It is code you own — edit its auth gate.",
+				type = "information",
+				file = "wheels"
+			);
+			return true;
+		} catch (any e) {
+			WriteLog(
+				text = "[wheels-websockets] Could not install the Lucee listener (#e.message#). Copy vendor/wheels-websockets/lucee/wheels.cfc into the extension's websockets directory manually.",
+				type = "warning",
+				file = "wheels"
+			);
+			return false;
+		}
 	}
 }

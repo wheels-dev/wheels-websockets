@@ -181,6 +181,56 @@ component extends="wheels.WheelsTest" {
 				expect(DeserializeJSON(ack).d.received).toBeTrue();
 			});
 		});
+
+		describe("lucee transport resolution and install guards", () => {
+
+			it("mode=lucee resolves inactive when the extension BIF is absent", () => {
+				// Package specs run on stock engines without the websocket
+				// extension, so the forced-lucee branch must feature-check.
+				var transport = $wsPackage().$resolveWebsocketsTransport("lucee");
+				expect(transport.active()).toBeFalse();
+			});
+
+			it("mode=rustcfml resolves inactive when wsPublish is absent", () => {
+				var transport = $wsPackage().$resolveWebsocketsTransport("rustcfml");
+				expect(transport.active()).toBeFalse();
+			});
+
+			it("$installListenerFile writes the stamped listener into an empty directory", () => {
+				var dir = $wsTempDir();
+				var ok = $wsFreshPackage().$installListenerFile(directory = dir, app = {});
+
+				expect(ok).toBeTrue();
+				expect(FileExists(dir & "/wheels.cfc")).toBeTrue();
+				var content = FileRead(dir & "/wheels.cfc");
+				expect(content).toInclude("wheels-websockets");
+				expect(content).toInclude("onOpen");
+				DirectoryDelete(dir, true);
+			});
+
+			it("$installListenerFile never overwrites an existing file", () => {
+				var dir = $wsTempDir();
+				FileWrite(dir & "/wheels.cfc", "SENTINEL");
+
+				var ok = $wsFreshPackage().$installListenerFile(directory = dir, app = {});
+
+				expect(ok).toBeTrue();
+				expect(FileRead(dir & "/wheels.cfc")).toBe("SENTINEL");
+				DirectoryDelete(dir, true);
+			});
+
+			it("$installListenerFile honors websocketsListenerInstall=false", () => {
+				var dir = $wsTempDir();
+				var ok = $wsFreshPackage().$installListenerFile(
+					directory = dir,
+					app = { websocketsListenerInstall = false }
+				);
+
+				expect(ok).toBeFalse();
+				expect(FileExists(dir & "/wheels.cfc")).toBeFalse();
+				DirectoryDelete(dir, true);
+			});
+		});
 	}
 
 	// ------------------------------------------------------------------
@@ -209,6 +259,16 @@ component extends="wheels.WheelsTest" {
 			open = arguments.open,
 			failSend = arguments.failSend
 		);
+	}
+
+	private any function $wsFreshPackage() {
+		return CreateObject("component", GetMetadata($wsPackage()).name).init();
+	}
+
+	private string function $wsTempDir() {
+		local.dir = GetTempDirectory() & "wswheels-" & CreateUUID();
+		DirectoryCreate(local.dir, true, true);
+		return local.dir;
 	}
 
 	private void function $wsRegister(required string channel, required string connId, required any wsClient) {

@@ -82,8 +82,11 @@ component extends="wheels.WheelsTest" {
 			});
 
 			it("auto mode is inactive on engines without the wsPublish BIF", () => {
-				// This spec suite runs on Lucee/Adobe in CI, where the RustCFML
-				// realtime BIFs do not exist — auto must yield the null transport.
+				// Package specs run on stock engines where neither the RustCFML
+				// realtime BIFs nor the Lucee websocket extension are installed —
+				// auto must yield the null transport. (On a Lucee with the
+				// extension installed this spec would legitimately fail; run the
+				// suite on a stock engine.)
 				var t = $wsPackage().$resolveWebsocketsTransport("auto");
 				expect(t.active()).toBeFalse();
 			});
