@@ -1156,3 +1156,11 @@ WHEELS_PACKAGES_REGISTRY=wheels-dev/wheels-packages wheels packages show wheels-
 - **Spec coverage:** wire parity (T1), transport (T1), registry (T1/T2), listener + auto-install (T2/T3), detection/settings/fallback (T3), engine-agnostic specs (T1–T3), live Tomcat (T4), undertow spike (T5), RustCFML regression (T6), docs/0.2.0 (T7), registry publish + tracking (T8). Idle-timeout observation from the spec is documented in the listener header + README ("code you own"), not defaulted — matches spec.
 - **Type consistency:** transport `name()` = `"lucee-extension"` used identically in boot wiring (T3) and specs; registry key `"wheels-websockets"` + lock `"wheels-websockets-registry"` identical in T1 transport, T2 listener, spec helpers; `$installListenerFile(directory, app)` signature identical in T3 impl and specs.
 - **Known judgment points for the executor:** (a) the two forced-mode resolution specs may already pass before T3's change — they're pinning specs, keep them; (b) `websocketInfo().mapping` is asserted by the extension source to be the absolute physical directory — if a live run shows it's a file path or has a trailing slash, adjust `ListAppend(...)` accordingly and add a spec; (c) `LUCEE_EXTENSIONS` GUID/version syntax may need the `name=` field on some Lucee builds — Task 4 Step 1 lists the `.lex`-drop fallback.
+
+## Post-execution note (2026-07-06)
+
+Execution corrected this plan's extension-version assumption: **3.0.0.20 was never
+released** — the store's latest is 3.0.0.18 (works on Lucee 6.2+, verified live;
+fails to load on Lucee 7 due to an engine API break). Wherever this plan says
+"released 3.0.0.20", read "released 3.0.0.18". Full verdicts: the spec's
+"Post-verification amendments" section and the `.superpowers/sdd/` task reports.

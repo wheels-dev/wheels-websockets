@@ -69,7 +69,7 @@ Then, on RustCFML:
 eviction) against the store extension above. **Lucee 7 is pending upstream fixes**:
 its extension startup hook never fires on any current 7.x build, and the store has
 no jakarta-compatible extension release yet — the package detects this, logs one
-warning, and channels keep working over SSE with zero request-path impact.
+warning, and channels keep working over SSE with zero request-path impact. Installing today's released extension (3.0.0.18) on Lucee 7 is harmless but inert: the extension itself fails to load with a `NoSuchMethodError` in Lucee's logs (a Lucee 7 API break), the engine and your app are unaffected, and the package stays on SSE — this is exactly the configuration our graceful-degradation verification ran against.
 
 **CommandBox / undertow footgun:** setting `web.webSocket.enable: true` in
 `server.json` arms CommandBox's own WebSocket layer, which answers `/ws/wheels`
