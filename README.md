@@ -26,7 +26,7 @@ package logs one line and stays on SSE — installing it is always safe.
 ## Install
 
 ```bash
-wheels packages add websockets
+wheels packages add wheels-websockets
 ```
 
 (or manually: extract the release into `vendor/wheels-websockets/` and reload.)

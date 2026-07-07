@@ -11,7 +11,7 @@
  *
  * Engine support:
  *   - RustCFML: native (`wsPublish` BIF + engine-served channel CFCs). Active automatically.
- *   - Lucee:    planned — emulation over lucee/extension-websocket (see tracking issue).
+ *   - Lucee:    6.2+ over the official lucee/extension-websocket (Lucee 7 pending upstream fixes; see README).
  *   - Others:   inactive; the app runs unchanged on SSE.
  *
  * NOTE ON MIXINS: every public non-lifecycle method below is copied onto the
