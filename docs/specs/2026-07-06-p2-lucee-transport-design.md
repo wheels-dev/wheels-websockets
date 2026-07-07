@@ -148,3 +148,10 @@ Engine floor: Lucee 6.2+ (extension requirement); older Lucee ⇒ inactive/SSE, 
 None blocking. Two observations recorded for later phases:
 - If the undertow spike **passes**, CommandBox users get WS with one server.json flag — worth a README callout.
 - The extension's default `idleTimeout` (300s) closes quiet connections; `WheelsRealtime` auto-reconnects, so behavior is correct but produces reconnect churn on idle dashboards. A `property idleTimeout=0` note in the listener template is documented, not defaulted.
+
+## Post-verification amendments (2026-07-06)
+
+- Extension version floor corrected: 3.0.0.20 → 3.0.0.18. `3.0.0.20` was never released — it was a forward-looking entry in this repo's own CHANGELOG draft.
+- Lucee 6.2+ verified live end-to-end (handshake, delivery, isolation, eviction) against store extension 3.0.0.18 on the official `lucee/lucee:6.2` image (Task 5b).
+- Lucee 7 confirmed non-functional on every current build tested (Tomcat 7.0.0.395, CommandBox/undertow 7.0.1.100): the extension's startup hook never fires on Lucee 7, and no jakarta-compatible release exists on the store (Tasks 4–5).
+- CommandBox/undertow footgun confirmed live: `web.webSocket.enable: true` arms CommandBox's own WebSocket layer, which answers `/ws/wheels` upgrades itself with zero frames delivered — independent of the Lucee 7 blocker (Task 5).

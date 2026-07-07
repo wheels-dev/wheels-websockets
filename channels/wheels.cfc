@@ -8,7 +8,7 @@
  * package's transport publishes each event only to its channel's room.
  *
  * This file is CODE YOU OWN — edit the auth gate below for your app.
- * Generated from wheels-websockets v0.1.0.
+ * Generated from wheels-websockets v0.2.0.
  */
 component socket="/wheels" encoding="json" {
 

@@ -16,11 +16,12 @@ publish("orders", "created", serializeJSON(order))
 | Engine | Transport | Status |
 |---|---|---|
 | RustCFML | Native (`wsPublish` + engine-served channel CFCs) | ✅ v0.1.0 |
-| Lucee 6/7 | Emulation over [lucee/extension-websocket](https://github.com/lucee/extension-websocket) | Planned ([#3292](https://github.com/wheels-dev/wheels/issues/3292)) |
+| Lucee 6.2+ | Over [lucee/extension-websocket](https://github.com/lucee/extension-websocket) | ✅ v0.2.0 — shipped, verified live |
+| Lucee 7 | Same backend | Pending upstream fixes ([#3292](https://github.com/wheels-dev/wheels/issues/3292)); graceful SSE fallback, verified |
 | Adobe CF / BoxLang | — | Demand-gated ([discussion #3286](https://github.com/wheels-dev/wheels/discussions/3286)) |
 
-On unsupported engines the package logs one line and stays inactive — installing it
-is always safe.
+On unsupported engines, or where a backend is detected but can't activate, the
+package logs one line and stays on SSE — installing it is always safe.
 
 ## Install
 
@@ -42,6 +43,42 @@ Then, on RustCFML:
    ```
 3. Reload the app. `wheels.log` shows:
    `[wheels-websockets] Active: 'rustcfml' transport bridging channel publishes to WebSocket clients ...`
+
+## Lucee setup (Lucee 6.2+)
+
+1. Install the official websocket extension once (needs a restart):
+   - env pin: `LUCEE_EXTENSIONS="3F9DFF32-B555-449D-B0EB5DB723044045;version=3.0.0.18"`
+   - or direct download: drop [`websocket-extension-3.0.0.18.lex`](https://ext.lucee.org/websocket-extension-3.0.0.18.lex)
+     into `lucee-server/deploy/` and restart
+   - or Lucee Admin → Extensions → "WebSocket"
+2. Install this package (`wheels packages add wheels-websockets`) and restart/reload.
+   On boot the package detects the extension, and — if the listener is absent — writes
+   `wheels.cfc` into the extension's configured websockets directory (skip with
+   `set(websocketsListenerInstall=false)`); channel publishes then reach WebSocket
+   clients at `ws://host/ws/wheels`.
+3. The listener is code you own — edit its auth gate in `onOpen()`. Delete it and
+   reload to regenerate.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `websocketsTransport` | `auto` | `auto` \| `rustcfml` \| `lucee` \| `none` |
+| `websocketsListenerInstall` | `true` | Allow boot() to write the listener when absent |
+
+**Servlet containers:** Tomcat (incl. Lucee Express / `wheels start`) works today on
+**Lucee 6.2+** — live-verified end-to-end (handshake, delivery, channel isolation,
+eviction) against the store extension above. **Lucee 7 is pending upstream fixes**:
+its extension startup hook never fires on any current 7.x build, and the store has
+no jakarta-compatible extension release yet — the package detects this, logs one
+warning, and channels keep working over SSE with zero request-path impact.
+
+**CommandBox / undertow footgun:** setting `web.webSocket.enable: true` in
+`server.json` arms CommandBox's own WebSocket layer, which answers `/ws/wheels`
+upgrades itself — a false-positive 101 handshake with no CFML listener behind it and
+no frames ever delivered. Even once Lucee 7 is fixed upstream, account for this
+shadowing before relying on WS over CommandBox.
+
+Any container without a JSR-356 `ServerContainer` (or Lucee < 6.2): the package
+logs once and stays on SSE.
 
 ## Use
 
@@ -95,7 +132,8 @@ restrict the rooms you return.
 ## How it works
 
 At app boot the package feature-detects the engine (`wsPublish` in
-`GetFunctionList()` ⇒ RustCFML) and, when a transport is available, pre-installs a
+`GetFunctionList()` ⇒ RustCFML; else a guarded `websocketInfo()` call ⇒ Lucee
+6.2+) and, when a transport is available, pre-installs a
 decorator around the framework's in-memory channel engine. The decorator forwards
 every `publish()` to the transport **after** normal delivery, failure-isolated — a
 broken socket layer can never affect `publish()` callers or SSE. Wheels channel
