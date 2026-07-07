@@ -126,7 +126,7 @@ component extends="wheels.WheelsTest" {
 		);
 	}
 
-	private void function $wsRegister(required string channel, required string connId, required any client) {
+	private void function $wsRegister(required string channel, required string connId, required any wsClient) {
 		lock name="wheels-websockets-registry" type="exclusive" timeout=5 {
 			if (!StructKeyExists(server, "wheels-websockets")) {
 				server["wheels-websockets"] = { registry = {} };
@@ -134,7 +134,7 @@ component extends="wheels.WheelsTest" {
 			if (!StructKeyExists(server["wheels-websockets"].registry, arguments.channel)) {
 				server["wheels-websockets"].registry[arguments.channel] = {};
 			}
-			server["wheels-websockets"].registry[arguments.channel][arguments.connId] = arguments.client;
+			server["wheels-websockets"].registry[arguments.channel][arguments.connId] = arguments.wsClient;
 		}
 	}
 
