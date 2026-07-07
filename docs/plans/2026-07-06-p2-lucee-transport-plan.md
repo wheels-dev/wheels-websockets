@@ -186,7 +186,8 @@ component extends="wheels.WheelsTest" {
 
 			it("is a no-op when the registry or channel is absent", () => {
 				$wsTransport().broadcast(channel = "ghost", event = "x", data = "{}", id = "1");
-				expect(true).toBeTrue();
+				// Not throwing is the behavior; also prove broadcast created no state.
+				expect(StructKeyExists(server, "wheels-websockets")).toBeFalse();
 			});
 
 			it("evicts closed clients without sending to them", () => {
