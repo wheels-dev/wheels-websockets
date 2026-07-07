@@ -2,6 +2,14 @@
 
 ## [0.2.0] - 2026-07-06
 
+> **Correction (2026-07-07):** retesting on current Lucee **7.0.4.34** showed the
+> "startup hook never fires" defect was already fixed upstream in Lucee **7.0.2.7**
+> ([LDEV-5955](https://luceeserver.atlassian.net/browse/LDEV-5955)) — our earlier
+> runs used older builds (7.0.0.395, 7.0.1.100). With a locally built extension
+> from master, the **full delivery bar passes on Lucee 7.0.4.34**. The single
+> remaining blocker for stock Lucee 7 users is that the store has no
+> jakarta-compatible extension release (3.0.0.18 fails to load on Lucee 7).
+
 ### Added
 
 - Lucee backend over the official [lucee/extension-websocket](https://github.com/lucee/extension-websocket)

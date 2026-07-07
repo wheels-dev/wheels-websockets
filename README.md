@@ -17,7 +17,7 @@ publish("orders", "created", serializeJSON(order))
 |---|---|---|
 | RustCFML | Native (`wsPublish` + engine-served channel CFCs) | ✅ v0.1.0 |
 | Lucee 6.2+ | Over [lucee/extension-websocket](https://github.com/lucee/extension-websocket) | ✅ v0.2.0 — shipped, verified live |
-| Lucee 7 | Same backend | Pending upstream fixes ([#3292](https://github.com/wheels-dev/wheels/issues/3292)); graceful SSE fallback, verified |
+| Lucee 7 | Same backend | ⏳ Works on 7.0.2.7+ (verified live on 7.0.4.34 with an extension master build) — waiting only on a jakarta-compatible extension **release** ([#3292](https://github.com/wheels-dev/wheels/issues/3292)); graceful SSE fallback until then |
 | Adobe CF / BoxLang | — | Demand-gated ([discussion #3286](https://github.com/wheels-dev/wheels/discussions/3286)) |
 
 On unsupported engines, or where a backend is detected but can't activate, the
@@ -66,10 +66,19 @@ Then, on RustCFML:
 
 **Servlet containers:** Tomcat (incl. Lucee Express / `wheels start`) works today on
 **Lucee 6.2+** — live-verified end-to-end (handshake, delivery, channel isolation,
-eviction) against the store extension above. **Lucee 7 is pending upstream fixes**:
-its extension startup hook never fires on any current 7.x build, and the store has
-no jakarta-compatible extension release yet — the package detects this, logs one
-warning, and channels keep working over SSE with zero request-path impact. Installing today's released extension (3.0.0.18) on Lucee 7 is harmless but inert: the extension itself fails to load with a `NoSuchMethodError` in Lucee's logs (a Lucee 7 API break), the engine and your app are unaffected, and the package stays on SSE — this is exactly the configuration our graceful-degradation verification ran against.
+eviction) against the store extension above. **Lucee 7 needs two things**: an engine
+at **7.0.2.7 or newer** (older 7.x builds never fire extension startup hooks —
+[LDEV-5955](https://luceeserver.atlassian.net/browse/LDEV-5955), fixed; note the
+`wheels` CLI's bundled Lucee Express is currently older than this) and a
+**jakarta-compatible extension release**, which the store doesn't have yet — the
+extension's master branch works (full delivery bar live-verified on Lucee 7.0.4.34
+from a local build), so this is purely a release-publication gap. Until it ships,
+the package detects the situation, logs one warning, and channels keep working over
+SSE with zero request-path impact. Installing today's released extension (3.0.0.18)
+on Lucee 7 is harmless but inert: the extension itself fails to load with a
+`NoSuchMethodError` in Lucee's logs (it predates Lucee 7's API), the engine and your
+app are unaffected, and the package stays on SSE — this is exactly the configuration
+our graceful-degradation verification ran against.
 
 **CommandBox / undertow footgun:** setting `web.webSocket.enable: true` in
 `server.json` arms CommandBox's own WebSocket layer, which answers `/ws/wheels`
