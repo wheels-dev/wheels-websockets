@@ -2,7 +2,7 @@
     "name": "wheels-websockets",
     "version": "0.2.0",
     "author": "Wheels Core Team",
-    "description": "Opt-in realtime WebSocket transport for Wheels channels. Native on RustCFML; Lucee 6.2+ over the official websocket extension (Lucee 7 pending upstream); graceful SSE fallback everywhere else.",
+    "description": "Opt-in realtime WebSocket transport for Wheels channels. Native on RustCFML; Lucee 6.2+ over the official websocket extension (Lucee 7.0.2.7+ with the extension's 3.0.0.20-SNAPSHOT pinned until a jakarta-compatible release ships); graceful SSE fallback everywhere else.",
     "wheelsVersion": ">=4.0",
     "provides": {
         "mixins": "global",

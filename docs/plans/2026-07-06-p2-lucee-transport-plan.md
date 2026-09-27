@@ -6,7 +6,7 @@
 
 **Architecture:** A new `LuceeExtensionTransport` plugs into the existing `ChannelEngineDecorator` seam. Connections register into a `server`-scope registry from an auto-installed, self-contained listener CFC (`wheels.cfc`) served by the extension at `/ws/wheels`; `broadcast()` snapshots the channel's clients under a named lock and `wsClient.send()`s the P1 frame, evicting dead clients.
 
-**Tech Stack:** CFML (package repo `~/GitHub/wheels-dev/wheels-websockets`), lucee/extension-websocket ≥ 3.0.0.20, TestBox specs run inside the Wheels demo app (`~/GitHub/wheels-dev/wheels`) on the docker lucee7 image, node `ws` client for live verification.
+**Tech Stack:** CFML (package repo `~/GitHub/wheels-dev/wheels-websockets`), lucee/extension-websocket ≥ 3.0.0.18 (*corrected — 3.0.0.20 was never released; Lucee 7 needs `3.0.0.20-SNAPSHOT`, see the note at the end*), TestBox specs run inside the Wheels demo app (`~/GitHub/wheels-dev/wheels`) on the docker lucee7 image, node `ws` client for live verification.
 
 **Spec:** `docs/specs/2026-07-06-p2-lucee-transport-design.md` (approved 2026-07-06). Read it before starting.
 
@@ -14,7 +14,7 @@
 
 - Wire frame, verbatim: `{"t":"msg","ch":"/wheels","ev":<event>,"d":{"channel":<name>,"data":<string>,"id":<id>},"id":<id>}`. `d.data` is the string exactly as passed to `broadcast()`.
 - **JSON keys MUST serialize in lowercase.** Lucee uppercases unquoted struct-literal keys; every frame struct literal MUST use quoted keys (`{"t" = "msg", ...}`). Specs assert the raw string with case-sensitive `Find()`.
-- Extension floor: released **3.0.0.20**. `wsClient.getSession()` is unreleased (3.0.0.21) — MUST NOT be used. Connection ids are `CreateUUID()`.
+- Extension floor: released **3.0.0.18** (*corrected from 3.0.0.20, which was never released*). `wsClient.getSession()` is unreleased (3.0.0.21) — MUST NOT be used. Connection ids are `CreateUUID()`.
 - Server-scope key is exactly `"wheels-websockets"`; lock name is exactly `"wheels-websockets-registry"` (both sides: listener + transport).
 - The listener template is **self-contained** (no `vendor.*` CreateObject paths, no `application.wheels` access) — it runs on a synthetic page context outside the app.
 - Package CFCs compile on every engine (Lucee, Adobe, BoxLang, RustCFML); Lucee-only BIF calls (`websocketInfo()`) must be behind `GetFunctionList()` probes or try/catch. Specs must pass on a stock engine with **no** extension installed.
@@ -905,7 +905,8 @@ Preferred host: the wheels repo demo app (package already rsync'd from Task 0 �
 ```bash
 cd ~/GitHub/wheels-dev/wheels
 git checkout -- server.json config/settings.cfm CFConfig.json && rm -f box.json   # unstage docker configs first
-LUCEE_EXTENSIONS="3F9DFF32-B555-449D-B0EB5DB723044045;version=3.0.0.20" wheels start
+# corrected: `version=3.0.0.20` 404s in the store; Lucee 7 needs the snapshot pin
+LUCEE_EXTENSIONS="3F9DFF32-B555-449D-B0EB5DB723044045;version=3.0.0.20-SNAPSHOT" wheels start
 ```
 
 Notes for the executor: the GUID is the extension's ID from download.lucee.org. If the env-var form doesn't take (check `wheels log` / server console for "websocket"), fall back to dropping the `.lex` into the runtime's `lucee-server/deploy/` dir (`find ~/.lucli -type d -name deploy`), then restart. Confirm install with a probe page or `wheels console` evaluating `IsDefined("websocketInfo")`.
@@ -995,7 +996,7 @@ cd ~/GitHub/wheels-dev/wheels
 cp tools/docker/lucee7/server.json server.json   # re-stage, then edit in the webSocket key
 docker rm -f wheels-lucee7-p2
 docker run -d --name wheels-lucee7-p2 -p 60007:60007 \
-  -e LUCEE_EXTENSIONS="3F9DFF32-B555-449D-B0EB5DB723044045;version=3.0.0.20" \
+  -e LUCEE_EXTENSIONS="3F9DFF32-B555-449D-B0EB5DB723044045;version=3.0.0.20-SNAPSHOT" \
   -v "$PWD":/wheels-test-suite wheels-test-lucee7:v1.0.0
 sleep 60
 ```
@@ -1063,7 +1064,7 @@ Engine matrix row for Lucee changes from "planned" to shipped; add a "Lucee setu
 ## Lucee setup (Lucee 6.2+)
 
 1. Install the official websocket extension once (needs a restart):
-   - env pin: `LUCEE_EXTENSIONS="3F9DFF32-B555-449D-B0EB5DB723044045;version=3.0.0.20"`
+   - env pin: `LUCEE_EXTENSIONS="3F9DFF32-B555-449D-B0EB5DB723044045;version=3.0.0.18"` (Lucee 6.2; on Lucee 7 use `version=3.0.0.20-SNAPSHOT` — *corrected, `3.0.0.20` 404s*)
    - or Lucee Admin → Extensions → "WebSocket".
 2. Install this package (`wheels packages add wheels-websockets`) and restart/reload.
    On boot the package writes the `wheels.cfc` listener into the extension's
@@ -1164,3 +1165,10 @@ released** — the store's latest is 3.0.0.18 (works on Lucee 6.2+, verified liv
 fails to load on Lucee 7 due to an engine API break). Wherever this plan says
 "released 3.0.0.20", read "released 3.0.0.18". Full verdicts: the spec's
 "Post-verification amendments" section and the `.superpowers/sdd/` task reports.
+
+**2026-09-27 correction ([#1](https://github.com/wheels-dev/wheels-websockets/issues/1)):** the
+`version=3.0.0.20` pins above have been corrected in place — that version returns 404 from the
+store. The store's newest release is still 3.0.0.18 (Lucee 6.2 only); a Lucee 7-loadable build is
+served only to an explicit `version=3.0.0.20-SNAPSHOT` pin. With it, the full delivery bar passes on
+stock Lucee 7.0.5.41, provided the app's `rewrite.config` passes `/ws/` upgrades through
+([wheels-dev/wheels#3676](https://github.com/wheels-dev/wheels/pull/3676)).
