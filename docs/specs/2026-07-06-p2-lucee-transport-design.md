@@ -25,7 +25,7 @@ core changes, no JS changes, SSE fallback everywhere else.
 
 | Candidate | Verdict | Why |
 |---|---|---|
-| **lucee/extension-websocket** (official) | **Chosen** | Active (3.0.0.20 released, CI, recent LDEV fixes). Dual-API: javax on Lucee 6.2+/Tomcat 9, jakarta on Lucee 7/Tomcat 11. Serves listener CFCs at `/ws/{component-name}` → free URL parity with P1. `.lex` install, pinnable via `LUCEE_EXTENSIONS`. |
+| **lucee/extension-websocket** (official) | **Chosen** | Active (CI, recent LDEV fixes; *corrected: 3.0.0.20 was never released — the store's newest release is 3.0.0.18, and a Lucee 7-loadable build exists only as `3.0.0.20-SNAPSHOT`; see amendments*). Dual-API: javax on Lucee 6.2+/Tomcat 9, jakarta on Lucee 7/Tomcat 11. Serves listener CFCs at `/ws/{component-name}` → free URL parity with P1. `.lex` install, pinnable via `LUCEE_EXTENSIONS`. |
 | isapir/lucee-websocket | Rejected | Requires hand-edited `web.xml` + jar on the container classpath; javax-era (Tomcat 8/9) — no Lucee 7/Tomcat 11 path. |
 | pixl8/socket.io-lucee | Rejected | Self-described ALPHA; pinned to socket.io client 2.3.1 (2020); client-side acks documented broken on Lucee 6/7. |
 
@@ -36,7 +36,7 @@ core changes, no JS changes, SSE fallback everywhere else.
 - `wsClient.send(message)` resolves engine config at call time ⇒ a stored `wsClient` reference is callable from any later HTTP request. This is the bridge primitive.
 - Listener CFCs execute on a synthetic page context (`ThreadUtil.createPageContext`) that never runs `Application.cfc` ⇒ **listeners cannot see `application.wheels`**. Shared state must live in the `server` scope.
 - The query string is passed into that page context ⇒ `url.channels` works inside the listener.
-- `wsClient.getSession()` ships only in **unreleased 3.0.0.21** — the design must not use it (released 3.0.0.20 is the floor).
+- `wsClient.getSession()` ships only in **unreleased 3.0.0.21** — the design must not use it (the release floor is 3.0.0.18 — *corrected; see amendments*).
 - `websocketInfo()` BIF: probe for detection; its `mapping` key is the absolute listener directory (used by auto-install); calling it also lazily registers the endpoint.
 - Deployment uses the JSR-356 `ServerContainer` ServletContext attribute: native on Tomcat (= Lucee Express, which is what LuCLI's `wheels start` runs); on CommandBox/undertow it requires `web.webSocket.enable` and needs a live spike; absent ⇒ the extension throws ⇒ we degrade to SSE.
 
@@ -141,7 +141,7 @@ Engine floor: Lucee 6.2+ (extension requirement); older Lucee ⇒ inactive/SSE, 
 | Concurrent `send()` to one session throws (JSR-356 single-writer) | Per-send try/catch + eviction; realtime contract is best-effort delivery |
 | Extension config directory not writable at boot | Warning log + manual copy instructions; transport activates only when the listener exists |
 | `server`-scope registry leaks entries | Eager deregister + lazy eviction on broadcast; entries are tiny (wsClient refs) |
-| Extension pre-3.0.0.20 or Lucee < 6.2 | Probe fails or `websocketInfo()` throws ⇒ inactive/SSE with one-time log |
+| Extension build that can't load on the engine (e.g. 3.0.0.18 on Lucee 7) or Lucee < 6.2 | Probe fails or `websocketInfo()` throws ⇒ inactive/SSE with one-time log |
 
 ## Unresolved questions
 
@@ -156,3 +156,4 @@ None blocking. Two observations recorded for later phases:
 - Lucee 7 confirmed non-functional on every current build tested (Tomcat 7.0.0.395, CommandBox/undertow 7.0.1.100): the extension's startup hook never fires on Lucee 7, and no jakarta-compatible release exists on the store (Tasks 4–5).
 - CommandBox/undertow footgun confirmed live: `web.webSocket.enable: true` arms CommandBox's own WebSocket layer, which answers `/ws/wheels` upgrades itself with zero frames delivered — independent of the Lucee 7 blocker (Task 5).
 - **2026-07-07 retest supersedes the Lucee 7 bullet above:** the hook defect was LDEV-5955, already fixed in Lucee 7.0.2.7 — our runs had used older builds. On Lucee 7.0.4.34 + an extension master build, the full delivery bar passes. Remaining Lucee 7 blocker: no jakarta-compatible extension release on the store (3.0.0.18 fails to load; plain-form `startup-hook` manifest crash also reproduced on 7.0.4.34).
+- **2026-09-27 retest ([#1](https://github.com/wheels-dev/wheels-websockets/issues/1)):** the store still has no jakarta-compatible **release**. An unpinned install (`LUCEE_EXTENSIONS` with the ID only) resolves to 3.0.0.18, which fails to load on Lucee 7.0.5.41 (`NoSuchMethodError`, package stays on SSE). The store does serve `3.0.0.20-SNAPSHOT` (built 2026-03-24) to an explicit `version=3.0.0.20-SNAPSHOT` pin; `version=3.0.0.19` and `version=3.0.0.20` return 404. With that pin, the full delivery bar passes on stock Lucee 7.0.5.41 (Tomcat 11) — once the app's `rewrite.config` passes `/ws/` upgrades through ([wheels-dev/wheels#3676](https://github.com/wheels-dev/wheels/pull/3676)); the `wheels new` template's front-controller catch-all otherwise answers `/ws/wheels` with a Wheels 404. CommandBox 6.3.3/undertow still delivers no frames (the upgrade is accepted, then closed `1006`, even for a trivial echo listener).

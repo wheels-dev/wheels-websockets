@@ -17,7 +17,7 @@ publish("orders", "created", serializeJSON(order))
 |---|---|---|
 | RustCFML | Native (`wsPublish` + engine-served channel CFCs) | ✅ v0.1.0 |
 | Lucee 6.2+ | Over [lucee/extension-websocket](https://github.com/lucee/extension-websocket) | ✅ v0.2.0 — shipped, verified live |
-| Lucee 7 | Same backend | ⏳ Works on 7.0.2.7+ (verified live on 7.0.4.34 with an extension master build) — waiting only on a jakarta-compatible extension **release** ([#3292](https://github.com/wheels-dev/wheels/issues/3292)); graceful SSE fallback until then |
+| Lucee 7 | Same backend | ⚠️ Works on 7.0.2.7+ **only with the store's `3.0.0.20-SNAPSHOT` extension pinned** (full delivery bar verified live on 7.0.5.41) — an unpinned install gets 3.0.0.18, which can't load on Lucee 7, so the package stays on SSE. Waiting on a jakarta-compatible extension **release** ([#1](https://github.com/wheels-dev/wheels-websockets/issues/1), [#3292](https://github.com/wheels-dev/wheels/issues/3292)). See [Lucee 7](#lucee-7) |
 | Adobe CF / BoxLang | — | Demand-gated ([discussion #3286](https://github.com/wheels-dev/wheels/discussions/3286)) |
 
 On unsupported engines, or where a backend is detected but can't activate, the
@@ -46,7 +46,8 @@ Then, on RustCFML:
 
 ## Lucee setup (Lucee 6.2+)
 
-1. Install the official websocket extension once (needs a restart):
+1. Install the official websocket extension once (needs a restart). On **Lucee 7**, pin
+   the snapshot build instead — see [Lucee 7](#lucee-7).
    - env pin: `LUCEE_EXTENSIONS="3F9DFF32-B555-449D-B0EB5DB723044045;version=3.0.0.18"`
    - or direct download: drop [`websocket-extension-3.0.0.18.lex`](https://ext.lucee.org/websocket-extension-3.0.0.18.lex)
      into `lucee-server/deploy/` and restart
@@ -66,25 +67,59 @@ Then, on RustCFML:
 
 **Servlet containers:** Tomcat (incl. Lucee Express / `wheels start`) works today on
 **Lucee 6.2+** — live-verified end-to-end (handshake, delivery, channel isolation,
-eviction) against the store extension above. **Lucee 7 needs two things**: an engine
-at **7.0.2.7 or newer** (older 7.x builds never fire extension startup hooks —
-[LDEV-5955](https://luceeserver.atlassian.net/browse/LDEV-5955), fixed; note the
-`wheels` CLI's bundled Lucee Express is currently older than this) and a
-**jakarta-compatible extension release**, which the store doesn't have yet — the
-extension's master branch works (full delivery bar live-verified on Lucee 7.0.4.34
-from a local build), so this is purely a release-publication gap. Until it ships,
-the package detects the situation, logs one warning, and channels keep working over
-SSE with zero request-path impact. Installing today's released extension (3.0.0.18)
-on Lucee 7 is harmless but inert: the extension itself fails to load with a
-`NoSuchMethodError` in Lucee's logs (it predates Lucee 7's API), the engine and your
-app are unaffected, and the package stays on SSE — this is exactly the configuration
-our graceful-degradation verification ran against.
+eviction) against the store extension above. For Lucee 7, see [Lucee 7](#lucee-7).
 
-**CommandBox / undertow footgun:** setting `web.webSocket.enable: true` in
-`server.json` arms CommandBox's own WebSocket layer, which answers `/ws/wheels`
+**Rewrite rules (`wheels start` / Tomcat):** the WebSocket upgrade has to get past
+your app's URL rewriting. Apps generated before
+[wheels-dev/wheels#3676](https://github.com/wheels-dev/wheels/pull/3676) ship a
+`rewrite.config` whose front-controller catch-all rewrites `/ws/wheels` to
+`/index.cfm/ws/wheels`, so the client gets a Wheels 404 instead of a `101`. Add these
+two lines to your project-root `rewrite.config`, just above the
+`# Route everything else through the front controller` rule, then restart:
+
+```
+RewriteCond %{HTTP:Upgrade} ^websocket$ [NC]
+RewriteRule ^/ws/.*$ - [L]
+```
+
+The `RewriteCond` keeps ordinary HTTP routes under `/ws/` on the Wheels router. A
+Dockerfile from `wheels deploy init` needs the same two lines in its `printf` rule list
+before `'RewriteRule ^/(.*)$ /index.cfm/$1 [L]'`.
+
+**CommandBox / undertow:** not a working path yet. Setting `web.webSocket.enable: true`
+in `server.json` arms CommandBox's own WebSocket layer, which answers `/ws/wheels`
 upgrades itself — a false-positive 101 handshake with no CFML listener behind it and
-no frames ever delivered. Even once Lucee 7 is fixed upstream, account for this
-shadowing before relying on WS over CommandBox.
+no frames ever delivered. Without that flag (retested on CommandBox 6.3.3 + Lucee
+7.0.5.41 + `3.0.0.20-SNAPSHOT`), the extension accepts the upgrade once `ws/` is
+excluded from `urlrewrite.xml`, but the connection closes (`1006`) without running the
+listener — even a trivial echo CFC gets no frame. Use Tomcat (`wheels start`, or the
+official `lucee/lucee` image) for WebSockets.
+
+### Lucee 7
+
+Lucee 7 works today when three things line up:
+
+1. **An engine at 7.0.2.7 or newer.** Older 7.x builds never fire extension startup
+   hooks ([LDEV-5955](https://luceeserver.atlassian.net/browse/LDEV-5955), fixed).
+   `wheels new` currently pins an older build (`"lucee": {"version": "7.0.0.395"}` in
+   `lucee.json`) — raise it, e.g. to `7.0.5.41`.
+2. **The extension's snapshot build, pinned.** The store serves a jakarta-compatible
+   build only as `3.0.0.20-SNAPSHOT`; `3.0.0.19` and `3.0.0.20` are not in the store.
+   ```bash
+   LUCEE_EXTENSIONS="3F9DFF32-B555-449D-B0EB5DB723044045;version=3.0.0.20-SNAPSHOT" wheels start
+   ```
+   An **unpinned** install (`LUCEE_EXTENSIONS` with the ID only) resolves to the newest
+   release, 3.0.0.18, which predates Lucee 7's API: it fails to load with a
+   `NoSuchMethodError` in Lucee's logs, the engine and your app are unaffected, and the
+   package logs one warning and stays on SSE with zero request-path impact.
+3. **The `/ws/` rewrite pass-through** above, for apps generated before
+   wheels-dev/wheels#3676.
+
+Verified live on Lucee 7.0.5.41 (Tomcat 11) with this setup: handshake + welcome,
+`publish()` delivery, channel isolation, dead-client eviction, and the SSE fallback
+with `set(websocketsTransport="none")`. The pin is a stopgap until
+lucee/extension-websocket publishes a jakarta-compatible **release**
+([#1](https://github.com/wheels-dev/wheels-websockets/issues/1)); drop it then.
 
 Any container without a JSR-356 `ServerContainer` (or Lucee < 6.2): the package
 logs once and stays on SSE.
